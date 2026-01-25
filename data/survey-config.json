@@ -1,0 +1,71 @@
+{
+  "title": "アンケートフォーム",
+  "subtitle": "サービス改善のため、ご意見をお聞かせください",
+  "fields": [
+    {
+      "id": "name",
+      "type": "text",
+      "label": "お名前",
+      "required": true,
+      "placeholder": "山田 太郎"
+    },
+    {
+      "id": "email",
+      "type": "email",
+      "label": "メールアドレス",
+      "required": true,
+      "placeholder": "example@email.com"
+    },
+    {
+      "id": "age",
+      "type": "select",
+      "label": "年齢層",
+      "required": false,
+      "options": [
+        "10代",
+        "20代",
+        "30代",
+        "40代",
+        "50代",
+        "60代以上"
+      ]
+    },
+    {
+      "id": "satisfaction",
+      "type": "radio",
+      "label": "総合満足度",
+      "required": true,
+      "options": [
+        "とても満足",
+        "満足",
+        "普通",
+        "不満",
+        "とても不満"
+      ]
+    },
+    {
+      "id": "features",
+      "type": "checkbox",
+      "label": "良かった点（複数選択可）",
+      "required": false,
+      "options": [
+        "デザイン",
+        "使いやすさ",
+        "機能性",
+        "価格",
+        "サポート",
+        "品質"
+      ]
+    },
+    {
+      "id": "field_1769349181284",
+      "type": "select",
+      "label": "えへへボタン",
+      "required": true,
+      "placeholder": "",
+      "options": [
+        "えへへ"
+      ]
+    }
+  ]
+}

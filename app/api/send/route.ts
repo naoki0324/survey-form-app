@@ -1,61 +1,77 @@
 import { Resend } from 'resend'
 import { NextResponse } from 'next/server'
+import { readFile } from 'fs/promises'
+import path from 'path'
+import type { SurveyConfig } from '@/types/survey'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-interface SurveyData {
-  name: string
-  email: string
-  age: string
-  satisfaction: string
-  features: string[]
-  improvement: string
-  recommend: string
-}
-
 export async function POST(request: Request) {
   try {
-    const data: SurveyData = await request.json()
+    const formData: Record<string, string | string[]> = await request.json()
 
-    // バリデーション
-    if (!data.name || !data.email || !data.satisfaction || !data.recommend) {
-      return NextResponse.json(
-        { error: '必須項目を入力してください' },
-        { status: 400 }
-      )
+    // 設定を読み込み
+    const configPath = path.join(process.cwd(), 'data', 'survey-config.json')
+    const configData = await readFile(configPath, 'utf-8')
+    const config: SurveyConfig = JSON.parse(configData)
+
+    // 必須項目のバリデーション
+    for (const field of config.fields) {
+      if (field.required) {
+        const value = formData[field.id]
+        if (!value || (Array.isArray(value) && value.length === 0)) {
+          return NextResponse.json(
+            { error: `${field.label}は必須項目です` },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // メール本文を作成
-    const emailBody = `
-アンケート回答を受信しました
+    const textLines: string[] = [
+      'アンケート回答を受信しました',
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '回答内容',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+    ]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-回答者情報
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const htmlRows: string[] = []
 
-お名前: ${data.name}
-メールアドレス: ${data.email}
-年齢層: ${data.age || '未回答'}
+    for (const field of config.fields) {
+      const value = formData[field.id]
+      let displayValue: string
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-アンケート回答
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      if (Array.isArray(value)) {
+        displayValue = value.length > 0 ? value.join(', ') : '未選択'
+      } else {
+        displayValue = value || '未回答'
+      }
 
-総合満足度: ${data.satisfaction}
+      textLines.push(`${field.label}: ${displayValue}`)
+      textLines.push('')
 
-良かった点: ${data.features.length > 0 ? data.features.join(', ') : '未選択'}
+      htmlRows.push(`
+        <div class="item">
+          <span class="label">${field.label}:</span>
+          ${Array.isArray(value) && value.length > 0
+            ? `<div class="features" style="margin-top: 8px;">${value.map(v => `<span class="feature">${v}</span>`).join('')}</div>`
+            : field.type === 'textarea'
+              ? `<div class="improvement">${displayValue}</div>`
+              : `<span>${displayValue}</span>`
+          }
+        </div>
+      `)
+    }
 
-改善してほしい点:
-${data.improvement || '未記入'}
+    textLines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    textLines.push(`送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`)
+    textLines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
-友人・知人への推薦: ${data.recommend}
+    const emailBody = textLines.join('\n')
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`
-
-    // HTML形式のメール
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -64,48 +80,25 @@ ${data.improvement || '未記入'}
   <style>
     body { font-family: sans-serif; line-height: 1.6; color: #333; }
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-    .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-    .section { margin-bottom: 20px; }
-    .section-title { font-weight: bold; color: #667eea; margin-bottom: 10px; border-bottom: 2px solid #667eea; padding-bottom: 5px; }
-    .item { margin-bottom: 8px; }
-    .label { font-weight: bold; color: #555; }
+    .header { background: #1A1A1A; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+    .content { background: #FAFAF8; padding: 20px; border-radius: 0 0 8px 8px; border: 1px solid #F0EDE8; border-top: none; }
+    .item { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F0EDE8; }
+    .item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .label { font-weight: 600; color: #3D3D3D; display: block; margin-bottom: 4px; }
     .features { display: flex; flex-wrap: wrap; gap: 8px; }
-    .feature { background: #667eea; color: white; padding: 4px 12px; border-radius: 20px; font-size: 14px; }
-    .improvement { background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea; }
-    .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
+    .feature { background: #F5F0E8; color: #5C4A32; padding: 4px 12px; border-radius: 20px; font-size: 14px; }
+    .improvement { background: white; padding: 12px; border-radius: 8px; border-left: 3px solid #C9A87C; margin-top: 8px; }
+    .footer { text-align: center; color: #8C8C8C; font-size: 12px; margin-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1 style="margin: 0;">アンケート回答</h1>
-      <p style="margin: 5px 0 0;">新しい回答が届きました</p>
+      <h1 style="margin: 0; font-size: 18px;">${config.title}</h1>
+      <p style="margin: 5px 0 0; opacity: 0.8; font-size: 14px;">新しい回答が届きました</p>
     </div>
     <div class="content">
-      <div class="section">
-        <div class="section-title">回答者情報</div>
-        <div class="item"><span class="label">お名前:</span> ${data.name}</div>
-        <div class="item"><span class="label">メールアドレス:</span> ${data.email}</div>
-        <div class="item"><span class="label">年齢層:</span> ${data.age || '未回答'}</div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">アンケート回答</div>
-        <div class="item"><span class="label">総合満足度:</span> ${data.satisfaction}</div>
-        <div class="item">
-          <span class="label">良かった点:</span>
-          ${data.features.length > 0
-            ? `<div class="features" style="margin-top: 8px;">${data.features.map(f => `<span class="feature">${f}</span>`).join('')}</div>`
-            : '未選択'}
-        </div>
-        <div class="item">
-          <span class="label">改善してほしい点:</span>
-          <div class="improvement">${data.improvement || '未記入'}</div>
-        </div>
-        <div class="item"><span class="label">友人・知人への推薦:</span> ${data.recommend}</div>
-      </div>
-
+      ${htmlRows.join('')}
       <div class="footer">
         送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
       </div>
@@ -118,13 +111,21 @@ ${data.improvement || '未記入'}
     // 送信先メールアドレス（環境変数から取得）
     const toEmail = process.env.TO_EMAIL || 'your-email@example.com'
 
+    // 回答者のメールアドレスを取得（あれば）
+    const emailField = config.fields.find(f => f.type === 'email')
+    const replyToEmail = emailField ? formData[emailField.id] as string : undefined
+
+    // 回答者の名前を取得（あれば）
+    const nameField = config.fields.find(f => f.id === 'name' || f.label.includes('名前'))
+    const responderName = nameField ? formData[nameField.id] as string : '回答者'
+
     const { error } = await resend.emails.send({
-      from: 'アンケートフォーム <onboarding@resend.dev>',
+      from: `${config.title} <onboarding@resend.dev>`,
       to: [toEmail],
-      subject: `【アンケート回答】${data.name}様より`,
+      subject: `【${config.title}】${responderName}様より回答`,
       text: emailBody,
       html: emailHtml,
-      replyTo: data.email,
+      reply_to: replyToEmail,
     })
 
     if (error) {

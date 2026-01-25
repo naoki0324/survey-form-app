@@ -1,49 +1,72 @@
 'use client'
 
-import { useState } from 'react'
-
-interface FormData {
-  name: string
-  email: string
-  age: string
-  satisfaction: string
-  features: string[]
-  improvement: string
-  recommend: string
-}
-
-const initialFormData: FormData = {
-  name: '',
-  email: '',
-  age: '',
-  satisfaction: '',
-  features: [],
-  improvement: '',
-  recommend: '',
-}
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import type { SurveyConfig, SurveyField } from '@/types/survey'
 
 export default function SurveyForm() {
-  const [formData, setFormData] = useState<FormData>(initialFormData)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [config, setConfig] = useState<SurveyConfig | null>(null)
+  const [formData, setFormData] = useState<Record<string, string | string[]>>({})
+  const [status, setStatus] = useState<'loading' | 'idle' | 'submitting' | 'success' | 'error'>('loading')
   const [errorMessage, setErrorMessage] = useState('')
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+  useEffect(() => {
+    fetchConfig()
+  }, [])
+
+  const fetchConfig = async () => {
+    try {
+      const response = await fetch('/api/config')
+      const data: SurveyConfig = await response.json()
+      setConfig(data)
+
+      // フォームデータの初期化
+      const initialData: Record<string, string | string[]> = {}
+      data.fields.forEach(field => {
+        initialData[field.id] = field.type === 'checkbox' ? [] : ''
+      })
+      setFormData(initialData)
+      setStatus('idle')
+    } catch (error) {
+      setErrorMessage('フォームの読み込みに失敗しました')
+      setStatus('error')
+    }
   }
 
-  const handleFeatureToggle = (feature: string) => {
-    setFormData(prev => ({
-      ...prev,
-      features: prev.features.includes(feature)
-        ? prev.features.filter(f => f !== feature)
-        : [...prev.features, feature]
-    }))
+  const handleChange = (fieldId: string, value: string) => {
+    setFormData(prev => ({ ...prev, [fieldId]: value }))
+  }
+
+  const handleInvalid = (e: React.InvalidEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>, fieldLabel: string) => {
+    const target = e.target
+    if (target.validity.valueMissing) {
+      target.setCustomValidity(`${fieldLabel}を入力してください`)
+    } else if (target.validity.typeMismatch && target.type === 'email') {
+      target.setCustomValidity('有効なメールアドレスを入力してください')
+    } else {
+      target.setCustomValidity('')
+    }
+  }
+
+  const handleInput = (e: React.FormEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    e.currentTarget.setCustomValidity('')
+  }
+
+  const handleCheckboxToggle = (fieldId: string, option: string) => {
+    setFormData(prev => {
+      const current = prev[fieldId] as string[]
+      return {
+        ...prev,
+        [fieldId]: current.includes(option)
+          ? current.filter(v => v !== option)
+          : [...current, option]
+      }
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setStatus('loading')
+    setStatus('submitting')
     setErrorMessage('')
 
     try {
@@ -67,9 +90,124 @@ export default function SurveyForm() {
   }
 
   const handleReset = () => {
-    setFormData(initialFormData)
+    if (!config) return
+
+    const initialData: Record<string, string | string[]> = {}
+    config.fields.forEach(field => {
+      initialData[field.id] = field.type === 'checkbox' ? [] : ''
+    })
+    setFormData(initialData)
     setStatus('idle')
     setErrorMessage('')
+  }
+
+  const renderField = (field: SurveyField) => {
+    switch (field.type) {
+      case 'text':
+      case 'email':
+        return (
+          <input
+            type={field.type}
+            id={field.id}
+            name={field.id}
+            value={formData[field.id] as string || ''}
+            onChange={e => handleChange(field.id, e.target.value)}
+            onInvalid={e => handleInvalid(e as React.InvalidEvent<HTMLInputElement>, field.label)}
+            onInput={handleInput}
+            required={field.required}
+            placeholder={field.placeholder}
+          />
+        )
+
+      case 'textarea':
+        return (
+          <textarea
+            id={field.id}
+            name={field.id}
+            value={formData[field.id] as string || ''}
+            onChange={e => handleChange(field.id, e.target.value)}
+            onInvalid={e => handleInvalid(e as React.InvalidEvent<HTMLTextAreaElement>, field.label)}
+            onInput={handleInput}
+            required={field.required}
+            placeholder={field.placeholder}
+          />
+        )
+
+      case 'select':
+        return (
+          <select
+            id={field.id}
+            name={field.id}
+            value={formData[field.id] as string || ''}
+            onChange={e => handleChange(field.id, e.target.value)}
+            onInvalid={e => handleInvalid(e as React.InvalidEvent<HTMLSelectElement>, field.label)}
+            onInput={handleInput}
+            required={field.required}
+          >
+            <option value="">選択してください</option>
+            {field.options?.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        )
+
+      case 'radio':
+        return (
+          <div className="radio-group">
+            {field.options?.map((option, index) => (
+              <label key={option} className="radio-option">
+                <input
+                  type="radio"
+                  name={field.id}
+                  value={option}
+                  checked={formData[field.id] === option}
+                  onChange={e => handleChange(field.id, e.target.value)}
+                  onInvalid={e => {
+                    const target = e.target as HTMLInputElement
+                    target.setCustomValidity(`${field.label}を選択してください`)
+                  }}
+                  onInput={e => {
+                    const target = e.target as HTMLInputElement
+                    target.setCustomValidity('')
+                  }}
+                  required={field.required && index === 0}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        )
+
+      case 'checkbox':
+        return (
+          <div className="checkbox-group">
+            {field.options?.map(option => (
+              <label
+                key={option}
+                className={`checkbox-option ${(formData[field.id] as string[])?.includes(option) ? 'checked' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={(formData[field.id] as string[])?.includes(option) || false}
+                  onChange={() => handleCheckboxToggle(field.id, option)}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="container">
+        <p style={{ textAlign: 'center', color: '#8C8C8C' }}>読み込み中...</p>
+      </div>
+    )
   }
 
   if (status === 'success') {
@@ -87,147 +225,53 @@ export default function SurveyForm() {
     )
   }
 
-  const featureOptions = [
-    'デザイン',
-    '使いやすさ',
-    '機能性',
-    '価格',
-    'サポート',
-    '品質',
-  ]
+  if (!config) {
+    return (
+      <div className="container">
+        <p style={{ textAlign: 'center', color: '#8B4545' }}>フォームを読み込めませんでした</p>
+      </div>
+    )
+  }
 
   return (
     <div className="container">
-      <h1>アンケートフォーム</h1>
-      <p className="subtitle">サービス改善のため、ご意見をお聞かせください</p>
+      <div style={{ position: 'absolute', top: '1rem', right: '1rem' }}>
+        <Link
+          href="/admin"
+          style={{
+            color: '#8C8C8C',
+            textDecoration: 'none',
+            fontSize: '0.8rem',
+            padding: '0.4rem 0.75rem',
+            border: '1px solid #E8E4DF',
+            borderRadius: '6px',
+            transition: 'all 0.2s',
+          }}
+        >
+          管理
+        </Link>
+      </div>
+
+      <h1>{config.title}</h1>
+      <p className="subtitle">{config.subtitle}</p>
 
       {status === 'error' && (
         <div className="message error">{errorMessage}</div>
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="name">
-            お名前<span className="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            required
-            placeholder="山田 太郎"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="email">
-            メールアドレス<span className="required">*</span>
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            placeholder="example@email.com"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="age">年齢層</label>
-          <select
-            id="age"
-            name="age"
-            value={formData.age}
-            onChange={handleChange}
-          >
-            <option value="">選択してください</option>
-            <option value="10代">10代</option>
-            <option value="20代">20代</option>
-            <option value="30代">30代</option>
-            <option value="40代">40代</option>
-            <option value="50代">50代</option>
-            <option value="60代以上">60代以上</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>
-            総合満足度<span className="required">*</span>
-          </label>
-          <div className="radio-group">
-            {['とても満足', '満足', '普通', '不満', 'とても不満'].map(option => (
-              <label key={option} className="radio-option">
-                <input
-                  type="radio"
-                  name="satisfaction"
-                  value={option}
-                  checked={formData.satisfaction === option}
-                  onChange={handleChange}
-                  required
-                />
-                {option}
-              </label>
-            ))}
+        {config.fields.map(field => (
+          <div key={field.id} className="form-group">
+            <label htmlFor={field.id}>
+              {field.label}
+              {field.required && <span className="required">*</span>}
+            </label>
+            {renderField(field)}
           </div>
-        </div>
+        ))}
 
-        <div className="form-group">
-          <label>良かった点（複数選択可）</label>
-          <div className="checkbox-group">
-            {featureOptions.map(feature => (
-              <label
-                key={feature}
-                className={`checkbox-option ${formData.features.includes(feature) ? 'checked' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={formData.features.includes(feature)}
-                  onChange={() => handleFeatureToggle(feature)}
-                />
-                {feature}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="improvement">改善してほしい点</label>
-          <textarea
-            id="improvement"
-            name="improvement"
-            value={formData.improvement}
-            onChange={handleChange}
-            placeholder="ご意見・ご要望をお聞かせください"
-          />
-        </div>
-
-        <div className="form-group">
-          <label>
-            友人・知人に勧めたいですか？<span className="required">*</span>
-          </label>
-          <div className="radio-group">
-            {['ぜひ勧めたい', '勧めたい', 'どちらでもない', '勧めない'].map(option => (
-              <label key={option} className="radio-option">
-                <input
-                  type="radio"
-                  name="recommend"
-                  value={option}
-                  checked={formData.recommend === option}
-                  onChange={handleChange}
-                  required
-                />
-                {option}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <button type="submit" disabled={status === 'loading'}>
-          {status === 'loading' ? '送信中...' : '送信する'}
+        <button type="submit" disabled={status === 'submitting'}>
+          {status === 'submitting' ? '送信中...' : '送信する'}
         </button>
       </form>
     </div>
