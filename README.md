@@ -49,17 +49,17 @@ npm install
 1. [Resend](https://resend.com) でアカウントを作成
 2. ダッシュボードの「API Keys」からAPIキーを発行
 
-### 3. 環境変数の設定
+### 3. 1Password secret reference の設定
 
 ```bash
-cp .env.local.example .env.local
+cp .env.op.example .env.op
 ```
 
-`.env.local` を編集して以下を設定:
+`.env.op` を編集して、1Password の secret reference を設定:
 
 ```env
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TO_EMAIL=your-email@example.com
+RESEND_API_KEY=op://Personal/Survey Form App/RESEND_API_KEY
+TO_EMAIL=op://Personal/Survey Form App/TO_EMAIL
 ```
 
 | 変数名 | 説明 |
@@ -67,10 +67,12 @@ TO_EMAIL=your-email@example.com
 | `RESEND_API_KEY` | Resend APIキー |
 | `TO_EMAIL` | アンケート結果の送信先メールアドレス |
 
+`op://...` の取得には 1Password CLI (`op`) を利用します。ローカル開発では、平文の `.env.local` を作らずに `op run --env-file=.env.op -- ...` で起動してください。
+
 ### 4. 開発サーバーの起動
 
 ```bash
-npm run dev
+npm run dev:op
 ```
 
 http://localhost:3000 でアプリケーションにアクセスできます。
@@ -95,8 +97,8 @@ http://localhost:3000 でアプリケーションにアクセスできます。
 ### ビルド
 
 ```bash
-npm run build
-npm start
+npm run build:op
+npm run start:op
 ```
 
 ### Vercel へのデプロイ
@@ -124,7 +126,7 @@ survey-form-app/
 │   └── survey-config.json      # フォーム設定ファイル
 ├── types/
 │   └── survey.ts               # 型定義
-├── .env.local.example          # 環境変数サンプル
+├── .env.op.example             # 1Password secret reference のサンプル
 ├── .gitignore
 ├── next.config.js
 ├── package.json
@@ -173,6 +175,7 @@ survey-form-app/
 - 本番環境では独自ドメインを設定することを推奨します
 - `from` アドレスを変更する場合は、Resend でドメイン認証が必要です
 - Vercel等のサーバーレス環境では、JSONファイルへの書き込みが永続化されない場合があります。本番環境ではデータベースの使用を検討してください。
+- Vercel などのホスティング環境では `.env.op` は使わず、各プラットフォームの環境変数設定に `RESEND_API_KEY` と `TO_EMAIL` を直接登録してください。
 
 ## ライセンス
 

@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:op": "op run --env-file=.env.op -- ./node_modules/.bin/next dev",
     "build": "next build",
-    "start": "next start"
+    "build:op": "op run --env-file=.env.op -- ./node_modules/.bin/next build",
+    "start": "next start",
+    "start:op": "op run --env-file=.env.op -- ./node_modules/.bin/next start"
   },
   "dependencies": {
     "next": "^14.2.0",
